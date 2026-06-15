@@ -1,0 +1,121 @@
+version: "3.8"
+
+services:
+
+  # ===== DATABASES =====
+
+  mongo-stakeholders:
+    image: mongo:7
+    container_name: mongo-stakeholders
+    volumes:
+      - stakeholders-data:/data/db
+    networks:
+      - soa-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      retries: 5
+
+  mongo-blog:
+    image: mongo:7
+    container_name: mongo-blog
+    volumes:
+      - blog-data:/data/db
+    networks:
+      - soa-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      retries: 5
+
+  mongo-tour:
+    image: mongo:7
+    container_name: mongo-tour
+    volumes:
+      - tour-data:/data/db
+    networks:
+      - soa-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      retries: 5
+
+  # ===== MICROSERVICES =====
+
+  stakeholders-service:
+    build: ./stakeholders-service
+    container_name: stakeholders-service
+    environment:
+      - MONGO_URI=mongodb://mongo-stakeholders:27017/stakeholders
+      - JWT_SECRET=soa_secret_2025
+      - PORT=8081
+    depends_on:
+      mongo-stakeholders:
+        condition: service_healthy
+    networks:
+      - soa-network
+
+  blog-service:
+    build: ./blog-service
+    container_name: blog-service
+    environment:
+      - MONGO_URI=mongodb://mongo-blog:27017
+      - JWT_SECRET=soa_secret_2025
+    depends_on:
+      mongo-blog:
+        condition: service_healthy
+    networks:
+      - soa-network
+
+  tour-service:
+    build: ./tour-service
+    container_name: tour-service
+    environment:
+      - MONGO_URI=mongodb://mongo-tour:27017
+      - JWT_SECRET=soa_secret_2025
+      - PORT=8083
+    depends_on:
+      mongo-tour:
+        condition: service_healthy
+    networks:
+      - soa-network
+
+  # ===== GATEWAY =====
+
+  gateway:
+    build: ./gateway
+    container_name: gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - STAKEHOLDERS_URL=http://stakeholders-service:8081
+      - BLOG_URL=http://blog-service:8082
+      - TOUR_URL=http://tour-service:8083
+      - PORT=8080
+    depends_on:
+      - stakeholders-service
+      - blog-service
+      - tour-service
+    networks:
+      - soa-network
+
+  # ===== FRONTEND =====
+
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - gateway
+    networks:
+      - soa-network
+
+volumes:
+  stakeholders-data:
+  blog-data:
+  tour-data:
+
+networks:
+  soa-network:
+    driver: bridge
